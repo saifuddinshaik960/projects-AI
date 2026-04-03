@@ -1,7 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require("path");
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -12,16 +14,22 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 app.use(cors());
 app.use(express.json());
 
-// Test endpoint
+// ✅ Serve frontend files (IMPORTANT)
+app.use(express.static(__dirname));
+
+// ✅ Root route → show index.html
 app.get("/", (req, res) => {
-  res.send("Server working");
+  res.sendFile(path.join(__dirname, "index.html"));
 });
+
+
+// ================= GEMINI FUNCTIONS =================
 
 // Generate roadmap using Gemini
 async function generateRoadmap(skill) {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
+
     const prompt = `You are a career advisor and learning expert. Generate a 6-step learning roadmap for "${skill}" structured by difficulty levels.
 
 Format exactly as:
@@ -40,32 +48,29 @@ Requirements:
 - Focus on practical learning progression
 
 Skill: ${skill}`;
-    
+
     const result = await model.generateContent(prompt);
     const response = result.response.text();
-    
-    // Parse and clean the response
+
     const steps = response
       .split('\n')
       .map(line => line.trim())
-      .filter(line => line && /^\d+/.test(line)) // Only keep lines starting with numbers
-      .map(line => {
-        // Remove numbering and clean up the text
-        return line
-          .replace(/^\d+\.\s*/, '') // Remove "1. ", "2. ", etc.
-          .replace(/^\d+\)\s*/, '') // Remove "1) ", "2) ", etc.
-          .replace(/^\d+\.\s*/, '') // Remove any remaining numbered format
-          .replace(/^-\s*/, '') // Remove bullet points if any
-          .replace(/^\*\s*/, '') // Remove asterisks if any
-          .replace(/\[.*?\]/g, '') // Remove brackets and content
-          .replace(/[""''']/g, '') // Remove quotes
-          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-          .trim();
-      })
-      .filter(step => step.length > 0) // Remove empty steps
-      .slice(0, 6); // Ensure we get exactly 6 steps
-    
-    // If we don't get enough steps, provide fallback
+      .filter(line => line && /^\d+/.test(line))
+      .map(line =>
+        line
+          .replace(/^\d+\.\s*/, '')
+          .replace(/^\d+\)\s*/, '')
+          .replace(/^\d+\.\s*/, '')
+          .replace(/^-\s*/, '')
+          .replace(/^\*\s*/, '')
+          .replace(/\[.*?\]/g, '')
+          .replace(/[""''']/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+      )
+      .filter(step => step.length > 0)
+      .slice(0, 6);
+
     if (steps.length === 0) {
       return [
         `Start with basic ${skill} fundamentals`,
@@ -78,8 +83,8 @@ Skill: ${skill}`;
     }
 
     return steps;
+
   } catch (error) {
-    // Return fallback steps on error
     return [
       `Start with basic ${skill} fundamentals`,
       `Practice ${skill} exercises regularly`,
@@ -91,11 +96,11 @@ Skill: ${skill}`;
   }
 }
 
-// Generate job preparation tips using Gemini
+// Generate job tips
 async function generateJobTips(role) {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
+
     const prompt = `You are a career coach. Generate 5 short preparation tips for "${role}" job position.
 
 Format exactly as:
@@ -107,139 +112,107 @@ Format exactly as:
 
 Requirements:
 - Each tip must be under 10 words
-- Focus on actionable advice
-- Use bullet point style
-- No explanations or extra text
-- Only return the numbered list
-- Cover skills, interview, portfolio, networking
+- No explanations
+- Only numbered list
 
 Role: ${role}`;
-    
+
     const result = await model.generateContent(prompt);
     const response = result.response.text();
-    
-    // Parse and clean the response
+
     const tips = response
       .split('\n')
       .map(line => line.trim())
-      .filter(line => line && /^\d+/.test(line)) // Only keep lines starting with numbers
-      .map(line => {
-        // Remove numbering and clean up the text
-        return line
-          .replace(/^\d+\.\s*/, '') // Remove "1. ", "2. ", etc.
-          .replace(/^\d+\)\s*/, '') // Remove "1) ", "2) ", etc.
-          .replace(/^\d+\.\s*/, '') // Remove any remaining numbered format
-          .replace(/^-\s*/, '') // Remove bullet points if any
-          .replace(/^\*\s*/, '') // Remove asterisks if any
-          .replace(/\[.*?\]/g, '') // Remove brackets and content
-          .replace(/[""''']/g, '') // Remove quotes
-          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-          .trim();
-      })
-      .filter(tip => tip.length > 0) // Remove empty tips
-      .slice(0, 5); // Ensure we get exactly 5 tips
-    
-    // If we don't get enough tips, provide fallback
+      .filter(line => line && /^\d+/.test(line))
+      .map(line =>
+        line
+          .replace(/^\d+\.\s*/, '')
+          .replace(/^\d+\)\s*/, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+      )
+      .slice(0, 5);
+
     if (tips.length === 0) {
       return [
-        `Research ${role} job requirements thoroughly`,
-        `Build relevant ${role} skills and portfolio`,
-        `Practice ${role} interview questions`,
-        `Network with ${role} professionals`,
-        `Prepare your resume for ${role} positions`
+        `Research ${role} job requirements`,
+        `Build ${role} portfolio`,
+        `Practice interview questions`,
+        `Network with professionals`,
+        `Prepare strong resume`
       ];
     }
 
     return tips;
+
   } catch (error) {
-    // Return fallback tips on error
     return [
-      `Research ${role} job requirements thoroughly`,
-      `Build relevant ${role} skills and portfolio`,
-      `Practice ${role} interview questions`,
-      `Network with ${role} professionals`,
-      `Prepare your resume for ${role} positions`
+      `Research ${role} job requirements`,
+      `Build ${role} portfolio`,
+      `Practice interview questions`,
+      `Network with professionals`,
+      `Prepare strong resume`
     ];
   }
 }
 
-// POST /roadmap endpoint
+
+// ================= API ROUTES =================
+
+// Roadmap API
 app.post('/roadmap', async (req, res) => {
   try {
     const { skill } = req.body;
-    
-    if (!skill || typeof skill !== 'string' || skill.trim().length === 0) {
-      return res.status(400).json({ 
-        error: 'Skill parameter is required' 
-      });
+
+    if (!skill) {
+      return res.status(400).json({ error: 'Skill required' });
     }
-    
-    // Generate roadmap using Gemini
-    const roadmap = await generateRoadmap(skill.trim());
-    
-    res.json({
-      skill: skill.trim(),
-      roadmap: roadmap
-    });
-    
+
+    const roadmap = await generateRoadmap(skill);
+
+    res.json({ skill, roadmap });
+
   } catch (error) {
-    res.status(500).json({ 
-      error: 'Something went wrong' 
-    });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// POST /job endpoint
+// Job tips API
 app.post('/job', async (req, res) => {
   try {
     const { role } = req.body;
-    
-    if (!role || typeof role !== 'string' || role.trim().length === 0) {
-      return res.status(400).json({ 
-        error: 'Role parameter is required' 
-      });
+
+    if (!role) {
+      return res.status(400).json({ error: 'Role required' });
     }
-    
-    // Generate job preparation tips using Gemini
-    const prepTips = await generateJobTips(role.trim());
-    
-    res.json({
-      role: role.trim(),
-      preparationTips: prepTips
-    });
-    
+
+    const preparationTips = await generateJobTips(role);
+
+    res.json({ role, preparationTips });
+
   } catch (error) {
-    res.status(500).json({ 
-      error: 'Something went wrong' 
-    });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'CareerBoost API is running',
-    timestamp: new Date().toISOString()
+  res.json({
+    status: 'OK',
+    message: 'Server running'
   });
 });
+
+
+// ================= FRONTEND FALLBACK =================
+
+// ✅ Important for deployment (fixes blank page issues)
+app.use((req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`CareerBoost API server is running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-});
-
-// Global error handler
-app.use((error, req, res, next) => {
-  res.status(500).json({ 
-    error: 'Something went wrong' 
-  });
-});
-
-// Handle 404 errors
-app.use((req, res) => {
-  res.status(404).json({ 
-    error: 'Endpoint not found' 
-  });
+  console.log(`Server running on port ${PORT}`);
 });
