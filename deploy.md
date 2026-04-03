@@ -3,7 +3,7 @@
 ## Frontend Deployment
 
 ### 1. Update Production URL
-In `careerboost-ai.html`, update this line:
+In `index.html`, update this line:
 ```javascript
 const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
   ? 'http://localhost:3000' 
@@ -11,7 +11,7 @@ const API_BASE_URL = window.location.hostname === 'localhost' || window.location
 ```
 
 ### 2. Deploy to Static Hosting
-Upload `careerboost-ai.html` to any static hosting service:
+Upload `index.html` to any static hosting service:
 - Netlify
 - Vercel
 - GitHub Pages
