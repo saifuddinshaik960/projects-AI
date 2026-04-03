@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Integration Test</title>
+</head>
+<body>
+    <h1>API Integration Test</h1>
+    <button onclick="testRoadmap()">Test Roadmap API</button>
+    <button onclick="testJob()">Test Job API</button>
+    <div id="results"></div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5000';
+
+        async function testRoadmap() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/roadmap`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ skill: 'react development' })
+                });
+                
+                const data = await response.json();
+                document.getElementById('results').innerHTML = '<h3>Roadmap Success:</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('results').innerHTML = '<h3>Roadmap Error:</h3><pre>' + error.message + '</pre>';
+            }
+        }
+
+        async function testJob() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/job`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ role: 'frontend developer' })
+                });
+                
+                const data = await response.json();
+                document.getElementById('results').innerHTML = '<h3>Job Success:</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('results').innerHTML = '<h3>Job Error:</h3><pre>' + error.message + '</pre>';
+            }
+        }
+    </script>
+</body>
+</html>
