@@ -7,17 +7,15 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Initialize Google Generative AI
+// Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// ✅ Serve frontend files (IMPORTANT)
 app.use(express.static(__dirname));
 
-// ✅ Root route → show index.html
+// Root route
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
@@ -25,133 +23,35 @@ app.get("/", (req, res) => {
 
 // ================= GEMINI FUNCTIONS =================
 
-// Generate roadmap using Gemini
 async function generateRoadmap(skill) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `You are a career advisor and learning expert. Generate a 6-step learning roadmap for "${skill}" structured by difficulty levels.
-
-Format exactly as:
-1. [Beginner step]
-2. [Beginner step] 
-3. [Intermediate step]
-4. [Intermediate step]
-5. [Advanced step]
-6. [Advanced step]
-
-Requirements:
-- Each step must be concise and actionable
-- Maximum 8 words per step
-- No explanations or extra text
-- Only return the numbered list
-- Focus on practical learning progression
-
-Skill: ${skill}`;
-
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
-
-    const steps = response
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line && /^\d+/.test(line))
-      .map(line =>
-        line
-          .replace(/^\d+\.\s*/, '')
-          .replace(/^\d+\)\s*/, '')
-          .replace(/^\d+\.\s*/, '')
-          .replace(/^-\s*/, '')
-          .replace(/^\*\s*/, '')
-          .replace(/\[.*?\]/g, '')
-          .replace(/[""''']/g, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-      )
-      .filter(step => step.length > 0)
-      .slice(0, 6);
-
-    if (steps.length === 0) {
-      return [
-        `Start with basic ${skill} fundamentals`,
-        `Practice ${skill} exercises regularly`,
-        `Build ${skill} projects`,
-        `Study advanced ${skill} concepts`,
-        `Join ${skill} communities`,
-        `Stay updated with ${skill} trends`
-      ];
-    }
-
-    return steps;
-
-  } catch (error) {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const result = await model.generateContent(`Generate roadmap for ${skill}`);
+    return result.response.text().split('\n').slice(0, 6);
+  } catch {
     return [
-      `Start with basic ${skill} fundamentals`,
-      `Practice ${skill} exercises regularly`,
-      `Build ${skill} projects`,
-      `Study advanced ${skill} concepts`,
-      `Join ${skill} communities`,
-      `Stay updated with ${skill} trends`
+      `Learn basics of ${skill}`,
+      `Practice ${skill}`,
+      `Build projects`,
+      `Study advanced topics`,
+      `Join communities`,
+      `Stay updated`
     ];
   }
 }
 
-// Generate job tips
 async function generateJobTips(role) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `You are a career coach. Generate 5 short preparation tips for "${role}" job position.
-
-Format exactly as:
-1. [Tip]
-2. [Tip]
-3. [Tip]
-4. [Tip]
-5. [Tip]
-
-Requirements:
-- Each tip must be under 10 words
-- No explanations
-- Only numbered list
-
-Role: ${role}`;
-
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
-
-    const tips = response
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line && /^\d+/.test(line))
-      .map(line =>
-        line
-          .replace(/^\d+\.\s*/, '')
-          .replace(/^\d+\)\s*/, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-      )
-      .slice(0, 5);
-
-    if (tips.length === 0) {
-      return [
-        `Research ${role} job requirements`,
-        `Build ${role} portfolio`,
-        `Practice interview questions`,
-        `Network with professionals`,
-        `Prepare strong resume`
-      ];
-    }
-
-    return tips;
-
-  } catch (error) {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const result = await model.generateContent(`Give tips for ${role}`);
+    return result.response.text().split('\n').slice(0, 5);
+  } catch {
     return [
-      `Research ${role} job requirements`,
-      `Build ${role} portfolio`,
-      `Practice interview questions`,
-      `Network with professionals`,
-      `Prepare strong resume`
+      "Build portfolio",
+      "Practice interviews",
+      "Improve resume",
+      "Network",
+      "Apply regularly"
     ];
   }
 }
@@ -159,60 +59,141 @@ Role: ${role}`;
 
 // ================= API ROUTES =================
 
-// Roadmap API
 app.post('/roadmap', async (req, res) => {
-  try {
-    const { skill } = req.body;
+  const { skill } = req.body;
+  if (!skill) return res.status(400).json({ error: 'Skill required' });
 
-    if (!skill) {
-      return res.status(400).json({ error: 'Skill required' });
-    }
-
-    const roadmap = await generateRoadmap(skill);
-
-    res.json({ skill, roadmap });
-
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
-  }
+  const roadmap = await generateRoadmap(skill);
+  res.json({ skill, roadmap });
 });
 
-// Job tips API
 app.post('/job', async (req, res) => {
-  try {
-    const { role } = req.body;
+  const { role } = req.body;
+  if (!role) return res.status(400).json({ error: 'Role required' });
 
-    if (!role) {
-      return res.status(400).json({ error: 'Role required' });
+  const preparationTips = await generateJobTips(role);
+  res.json({ role, preparationTips });
+});
+
+
+// ================= REAL-TIME JOB FETCH =================
+
+async function fetchRealTimeJobData(userQuery) {
+  try {
+    let searchTerm = userQuery.toLowerCase();
+
+    // 🔥 SMART MAPPING
+    if (searchTerm.includes("data")) searchTerm = "data scientist";
+    else if (searchTerm.includes("web")) searchTerm = "web developer";
+    else if (searchTerm.includes("react")) searchTerm = "react developer";
+    else if (searchTerm.includes("python")) searchTerm = "python developer";
+    else if (searchTerm.includes("frontend")) searchTerm = "frontend developer";
+    else if (searchTerm.includes("backend")) searchTerm = "backend developer";
+    else if (searchTerm.includes("fullstack")) searchTerm = "full stack developer";
+    else if (searchTerm.includes("java")) searchTerm = "java developer";
+    else if (searchTerm.includes("node")) searchTerm = "node developer";
+
+    console.log("FINAL SEARCH TERM:", searchTerm);
+
+    // 🔹 MAIN API CALL
+    let apiUrl = `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(searchTerm)}`;
+    let response = await fetch(apiUrl);
+    let data = await response.json();
+
+    let jobs = data.jobs || [];
+
+    // 🔥 FALLBACK FIX (IMPORTANT)
+    if (jobs.length === 0) {
+      console.log("No jobs found, trying fallback...");
+
+      const fallbackUrl = `https://remotive.com/api/remote-jobs?search=developer`;
+      const fallbackRes = await fetch(fallbackUrl);
+      const fallbackData = await fallbackRes.json();
+
+      jobs = fallbackData.jobs || [];
     }
 
-    const preparationTips = await generateJobTips(role);
+    // Still empty safety
+    if (jobs.length === 0) {
+      return [];
+    }
 
-    res.json({ role, preparationTips });
+    return jobs.slice(0, 3).map(job => ({
+      title: job.title,
+      company: job.company_name,
+      location: job.candidate_required_location,
+      url: job.url
+    }));
+
+  } catch (err) {
+    console.error("Job fetch error:", err.message);
+    return [];
+  }
+}
+
+
+// ================= CHAT API =================
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message required' });
+    }
+
+    const jobs = await fetchRealTimeJobData(message);
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+    let aiResponse;
+
+    try {
+      const result = await model.generateContent(
+        `User asked: ${message}. Here are jobs: ${JSON.stringify(jobs)}`
+      );
+      aiResponse = result.response.text();
+    } catch (err) {
+      console.error("Gemini failed:", err.message);
+      aiResponse = `Found ${jobs.length} jobs. Top roles include: ${
+  jobs.map(j => j.title).join(", ")
+}`;
+    }
+
+    res.json({
+      message,
+      response: aiResponse,
+      jobs
+    });
 
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    console.error('Chat API Error:', error);
+
+    res.json({
+      message: req.body.message,
+      response: "Something went wrong.",
+      jobs: []
+    });
   }
 });
 
-// Health check
+
+// ================= HEALTH =================
+
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    message: 'Server running'
-  });
+  res.json({ status: 'OK' });
 });
 
 
-// ================= FRONTEND FALLBACK =================
+// ================= FALLBACK =================
 
-// ✅ Important for deployment (fixes blank page issues)
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
 
-// Start server
+// ================= START =================
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
